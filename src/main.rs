@@ -22,6 +22,20 @@ enum AppMode {
     Eraser,
 }
 
+struct PanicProof;
+
+impl Drop for PanicProof {
+    fn drop(&mut self) {
+        let _ = disable_raw_mode();
+        let _ = execute!(
+            io::stdout(),
+            LeaveAlternateScreen,
+            DisableMouseCapture,
+            crossterm::cursor::Show
+        );
+    }
+}
+
 struct TerminalCanvas<'a> {
     pixels: &'a [(u16, u16)],
     mode: &'a AppMode,
@@ -94,6 +108,7 @@ fn main() -> Result<(), io::Error> {
     let mut ghost_pixels: Vec<(u16, u16)> = Vec::new();
     let mut current_mode = AppMode::Freehand;
     let mut shape_start: Option<(u16, u16)> = None;
+    let _guard = PanicProof;
 
     loop {
         terminal.draw(|f| {
@@ -167,14 +182,6 @@ fn main() -> Result<(), io::Error> {
             }
         }
     }
-
-    disable_raw_mode()?;
-    execute!(
-        terminal.backend_mut(),
-        LeaveAlternateScreen,
-        DisableMouseCapture
-    )?;
-    terminal.show_cursor()?;
 
     Ok(())
 }
