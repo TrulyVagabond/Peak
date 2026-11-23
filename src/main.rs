@@ -1,5 +1,7 @@
 use crossterm::{
-    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, MouseEventKind},
+    event::{
+        self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyModifiers, MouseEventKind,
+    },
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
@@ -97,6 +99,30 @@ fn rectangle_pixels(start: (u16, u16), end: (u16, u16)) -> Vec<(u16, u16)> {
     dots
 }
 
+fn square_math(start: (u16, u16), mouse: (u16, u16), constrain: bool) -> (u16, u16) {
+    if constrain {
+        let (start_x, start_y) = start;
+        let (mx, my) = mouse;
+        let dx = mx as i32 - start_x as i32;
+        let dy = my as i32 - start_y as i32;
+        let size = dx.abs().max(dy.abs() * 2);
+        let corner_x = if dx >= 0 {
+            start_x as i32 + size
+        } else {
+            start_x as i32 - size
+        };
+
+        let corner_y = if dy >= 0 {
+            start_y as i32 + size / 2
+        } else {
+            start_y as i32 - size / 2
+        };
+        (corner_x.max(0) as u16, corner_y.max(0) as u16)
+    } else {
+        mouse
+    }
+}
+
 fn main() -> Result<(), io::Error> {
     enable_raw_mode()?;
     let mut stdout = io::stdout();
@@ -147,6 +173,14 @@ fn main() -> Result<(), io::Error> {
                 Event::Mouse(mouse_event) => match mouse_event.kind {
                     MouseEventKind::Down(crossterm::event::MouseButton::Left) => {
                         shape_start = Some((mouse_event.column, mouse_event.row));
+                        let mx = mouse_event.column;
+                        let my = mouse_event.row;
+
+                        if current_mode == AppMode::Freehand {
+                            drawn_pixels.push((mx, my));
+                        } else if current_mode == AppMode::Eraser {
+                            drawn_pixels.retain(|&(px, py)| px != mx || py != my);
+                        }
                     }
 
                     MouseEventKind::Drag(crossterm::event::MouseButton::Left) => {
@@ -159,7 +193,12 @@ fn main() -> Result<(), io::Error> {
                             drawn_pixels.retain(|&(px, py)| px != mx || py != my);
                         } else if current_mode == AppMode::Rectangle {
                             if let Some((start_x, start_y)) = shape_start {
-                                ghost_pixels = rectangle_pixels((start_x, start_y), (mx, my));
+                                let (end_x, end_y) = square_math(
+                                    (start_x, start_y),
+                                    (mx, my),
+                                    mouse_event.modifiers.contains(KeyModifiers::CONTROL),
+                                );
+                                ghost_pixels = rectangle_pixels((start_x, start_y), (end_x, end_y));
                             }
                         }
                     }
@@ -167,8 +206,13 @@ fn main() -> Result<(), io::Error> {
                     MouseEventKind::Up(crossterm::event::MouseButton::Left) => {
                         if current_mode == AppMode::Rectangle {
                             if let Some((start_x, start_y)) = shape_start {
-                                let end_x = mouse_event.column;
-                                let end_y = mouse_event.row;
+                                let mx = mouse_event.column;
+                                let my = mouse_event.row;
+                                let (end_x, end_y) = square_math(
+                                    (start_x, start_y),
+                                    (mx, my),
+                                    mouse_event.modifiers.contains(KeyModifiers::CONTROL),
+                                );
                                 drawn_pixels
                                     .extend(rectangle_pixels((start_x, start_y), (end_x, end_y)));
                             }
