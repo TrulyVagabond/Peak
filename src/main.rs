@@ -38,7 +38,7 @@ impl Drop for PanicProof {
 }
 
 struct TerminalCanvas<'a> {
-    pixels: &'a [(u16, u16)],
+    pixels: &'a [Pixels],
     mode: &'a AppMode,
     ghost_pixels: &'a [(u16, u16)],
 }
@@ -52,21 +52,22 @@ impl<'a> Widget for TerminalCanvas<'a> {
             AppMode::Square => "Square",
         };
 
-        let title = format!(
-            " Peak Project IKR - {} Mode (press 'q' to ragequit) ",
-            mode_name
-        );
+        let title = format!(" PeakTUI - {} Mode (press 'q' to ragequit) ", mode_name);
 
         Block::default()
             .borders(Borders::ALL)
             .title(title.as_str())
             .render(area, buf);
 
-        for &(x, y) in self.pixels {
-            if x > area.left() && x < area.right() - 1 && y > area.top() && y < area.bottom() - 1 {
-                buf[(x, y)]
+        for pixel in self.pixels {
+            if pixel.x > area.left()
+                && pixel.x < area.right() - 1
+                && pixel.y > area.top()
+                && pixel.y < area.bottom() - 1
+            {
+                buf[(pixel.x, pixel.y)]
                     .set_symbol("█")
-                    .set_style(Style::default().fg(Color::Red));
+                    .set_style(Style::default().fg(pixel.color));
             }
         }
 
@@ -78,6 +79,12 @@ impl<'a> Widget for TerminalCanvas<'a> {
             }
         }
     }
+}
+
+struct Pixels {
+    x: u16,
+    y: u16,
+    color: Color,
 }
 
 fn rectangle_pixels(start: (u16, u16), end: (u16, u16)) -> Vec<(u16, u16)> {
@@ -127,9 +134,10 @@ fn main() -> Result<(), io::Error> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let mut drawn_pixels: Vec<(u16, u16)> = Vec::new();
+    let mut drawn_pixels: Vec<Pixels> = Vec::new();
     let mut ghost_pixels: Vec<(u16, u16)> = Vec::new();
     let mut current_mode = AppMode::Freehand;
+    let mut current_color = Color::Red;
     let mut shape_start: Option<(u16, u16)> = None;
     let _guard = PanicProof;
 
@@ -163,6 +171,8 @@ fn main() -> Result<(), io::Error> {
                         current_mode = AppMode::Square;
                         ghost_pixels.clear();
                     }
+                    KeyCode::Char('1') => current_color = Color::Red,
+                    KeyCode::Char('2') => current_color = Color::Green,
                     KeyCode::Esc => {
                         drawn_pixels.clear();
                         ghost_pixels.clear();
@@ -178,9 +188,13 @@ fn main() -> Result<(), io::Error> {
                         let my = mouse_event.row;
 
                         if current_mode == AppMode::Freehand {
-                            drawn_pixels.push((mx, my));
+                            drawn_pixels.push(Pixels {
+                                x: mx,
+                                y: my,
+                                color: current_color,
+                            });
                         } else if current_mode == AppMode::Eraser {
-                            drawn_pixels.retain(|&(px, py)| px != mx || py != my);
+                            drawn_pixels.retain(|p| p.x != mx || p.y != my);
                         }
                     }
 
@@ -189,9 +203,13 @@ fn main() -> Result<(), io::Error> {
                         let my = mouse_event.row;
 
                         if current_mode == AppMode::Freehand {
-                            drawn_pixels.push((mx, my));
+                            drawn_pixels.push(Pixels {
+                                x: mx,
+                                y: my,
+                                color: current_color,
+                            });
                         } else if current_mode == AppMode::Eraser {
-                            drawn_pixels.retain(|&(px, py)| px != mx || py != my);
+                            drawn_pixels.retain(|p| p.x != mx || p.y != my);
                         } else if current_mode == AppMode::Rectangle {
                             if let Some((start_x, start_y)) = shape_start {
                                 ghost_pixels = rectangle_pixels((start_x, start_y), (mx, my));
@@ -209,15 +227,28 @@ fn main() -> Result<(), io::Error> {
                             if let Some((start_x, start_y)) = shape_start {
                                 let mx = mouse_event.column;
                                 let my = mouse_event.row;
-                                drawn_pixels.extend(rectangle_pixels((start_x, start_y), (mx, my)));
+                                for (x, y) in rectangle_pixels((start_x, start_y), (mx, my)) {
+                                    drawn_pixels.push(Pixels {
+                                        x,
+                                        y,
+                                        color: current_color,
+                                    });
+                                }
+                                //drawn_pixels.extend(rectangle_pixels((start_x, start_y), (mx, my)));
                             }
                         } else if current_mode == AppMode::Square {
                             if let Some((start_x, start_y)) = shape_start {
                                 let mx = mouse_event.column;
                                 let my = mouse_event.row;
                                 let (end_x, end_y) = square_math((start_x, start_y), (mx, my));
-                                drawn_pixels
-                                    .extend(rectangle_pixels((start_x, start_y), (end_x, end_y)));
+                                for (x, y) in rectangle_pixels((start_x, start_y), (end_x, end_y)) {
+                                    drawn_pixels.push(Pixels {
+                                        x,
+                                        y,
+                                        color: current_color,
+                                    });
+                                }
+                                //drawn_pixels.extend(rectangle_pixels((start_x, start_y), (end_x, end_y)));
                             }
                         }
                         shape_start = None;
