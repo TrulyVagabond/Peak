@@ -137,18 +137,33 @@ fn main() -> Result<(), io::Error> {
     let mut drawn_pixels: Vec<Pixels> = Vec::new();
     let mut ghost_pixels: Vec<(u16, u16)> = Vec::new();
     let mut current_mode = AppMode::Freehand;
+    let mut sidebar_open = false;
     let mut current_color = Color::Red;
     let mut shape_start: Option<(u16, u16)> = None;
     let _guard = PanicProof;
 
     loop {
         terminal.draw(|f| {
+            let area = f.area();
             let canvas = TerminalCanvas {
                 pixels: &drawn_pixels,
                 mode: &current_mode,
                 ghost_pixels: &ghost_pixels,
             };
-            f.render_widget(canvas, f.area());
+
+            if sidebar_open {
+                let canvas_area = Rect::new(area.x, area.y, area.width - 35, area.height);
+                let sidebar_area = Rect::new(area.right() - 35, area.y, 35, area.height);
+                f.render_widget(canvas, canvas_area);
+                f.render_widget(
+                    Block::default()
+                        .borders(Borders::TOP | Borders::BOTTOM | Borders::LEFT)
+                        .title(" Color Customization "),
+                    sidebar_area,
+                );
+            } else {
+                f.render_widget(canvas, area);
+            }
         })?;
 
         if event::poll(std::time::Duration::from_millis(16))? {
@@ -171,6 +186,10 @@ fn main() -> Result<(), io::Error> {
                         current_mode = AppMode::Square;
                         ghost_pixels.clear();
                     }
+                    KeyCode::Char('c') => {
+                        sidebar_open = !sidebar_open;
+                        ghost_pixels.clear();
+                    }
                     KeyCode::Char('1') => current_color = Color::Red,
                     KeyCode::Char('2') => current_color = Color::Green,
                     KeyCode::Esc => {
@@ -186,15 +205,24 @@ fn main() -> Result<(), io::Error> {
                         shape_start = Some((mouse_event.column, mouse_event.row));
                         let mx = mouse_event.column;
                         let my = mouse_event.row;
-
-                        if current_mode == AppMode::Freehand {
-                            drawn_pixels.push(Pixels {
-                                x: mx,
-                                y: my,
-                                color: current_color,
-                            });
-                        } else if current_mode == AppMode::Eraser {
-                            drawn_pixels.retain(|p| p.x != mx || p.y != my);
+                        let screen = terminal.size()?;
+                        let sidebar = Rect::new(screen.right() - 35, screen.y, 35, screen.height);
+                        let on_panel = sidebar_open
+                            && mx >= sidebar.x
+                            && mx < sidebar.right()
+                            && my >= sidebar.y
+                            && my < sidebar.bottom();
+                        if !on_panel {
+                            shape_start = Some((mx, my));
+                            if current_mode == AppMode::Freehand {
+                                drawn_pixels.push(Pixels {
+                                    x: mx,
+                                    y: my,
+                                    color: current_color,
+                                });
+                            } else if current_mode == AppMode::Eraser {
+                                drawn_pixels.retain(|p| p.x != mx || p.y != my);
+                            }
                         }
                     }
 
@@ -234,7 +262,6 @@ fn main() -> Result<(), io::Error> {
                                         color: current_color,
                                     });
                                 }
-                                //drawn_pixels.extend(rectangle_pixels((start_x, start_y), (mx, my)));
                             }
                         } else if current_mode == AppMode::Square {
                             if let Some((start_x, start_y)) = shape_start {
@@ -248,7 +275,6 @@ fn main() -> Result<(), io::Error> {
                                         color: current_color,
                                     });
                                 }
-                                //drawn_pixels.extend(rectangle_pixels((start_x, start_y), (end_x, end_y)));
                             }
                         }
                         shape_start = None;
