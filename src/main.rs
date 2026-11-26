@@ -41,6 +41,7 @@ struct TerminalCanvas<'a> {
     pixels: &'a [Pixels],
     mode: &'a AppMode,
     ghost_pixels: &'a [(u16, u16)],
+    hide_right_border: bool,
 }
 
 impl<'a> Widget for TerminalCanvas<'a> {
@@ -52,10 +53,16 @@ impl<'a> Widget for TerminalCanvas<'a> {
             AppMode::Square => "Square",
         };
 
+        let borders = if self.hide_right_border {
+            Borders::TOP | Borders::BOTTOM | Borders::LEFT
+        } else {
+            Borders::ALL
+        };
+
         let title = format!(" PeakTUI - {} Mode (press 'q' to ragequit) ", mode_name);
 
         Block::default()
-            .borders(Borders::ALL)
+            .borders(borders)
             .title(title.as_str())
             .render(area, buf);
 
@@ -138,6 +145,7 @@ fn main() -> Result<(), io::Error> {
     let mut ghost_pixels: Vec<(u16, u16)> = Vec::new();
     let mut current_mode = AppMode::Freehand;
     let mut sidebar_open = false;
+    let mut sidebar_width: u16 = 35;
     let mut current_color = Color::Red;
     let mut shape_start: Option<(u16, u16)> = None;
     let _guard = PanicProof;
@@ -149,11 +157,18 @@ fn main() -> Result<(), io::Error> {
                 pixels: &drawn_pixels,
                 mode: &current_mode,
                 ghost_pixels: &ghost_pixels,
+                hide_right_border: sidebar_open,
             };
 
             if sidebar_open {
-                let canvas_area = Rect::new(area.x, area.y, area.width - 35, area.height);
-                let sidebar_area = Rect::new(area.right() - 35, area.y, 35, area.height);
+                let canvas_area =
+                    Rect::new(area.x, area.y, area.width - sidebar_width, area.height);
+                let sidebar_area = Rect::new(
+                    area.right() - sidebar_width,
+                    area.y,
+                    sidebar_width,
+                    area.height,
+                );
                 f.render_widget(canvas, canvas_area);
                 f.render_widget(
                     Block::default()
@@ -202,17 +217,26 @@ fn main() -> Result<(), io::Error> {
 
                 Event::Mouse(mouse_event) => match mouse_event.kind {
                     MouseEventKind::Down(crossterm::event::MouseButton::Left) => {
-                        shape_start = Some((mouse_event.column, mouse_event.row));
                         let mx = mouse_event.column;
                         let my = mouse_event.row;
                         let screen = terminal.size()?;
-                        let sidebar = Rect::new(screen.right() - 35, screen.y, 35, screen.height);
+                        let sidebar = Rect::new(
+                            screen.width - sidebar_width,
+                            0,
+                            sidebar_width,
+                            screen.height,
+                        );
+                        if sidebar_open && mx == sidebar.x {
+                            let sidebar_drag = true;
+                        }
                         let on_panel = sidebar_open
                             && mx >= sidebar.x
                             && mx < sidebar.right()
                             && my >= sidebar.y
                             && my < sidebar.bottom();
-                        if !on_panel {
+                        if sidebar_drag {
+                            sidebar_width = (screen.width - mx).max(25).min(screen.width / 2)
+                        } else if !on_panel {
                             shape_start = Some((mx, my));
                             if current_mode == AppMode::Freehand {
                                 drawn_pixels.push(Pixels {
@@ -230,22 +254,42 @@ fn main() -> Result<(), io::Error> {
                         let mx = mouse_event.column;
                         let my = mouse_event.row;
 
-                        if current_mode == AppMode::Freehand {
-                            drawn_pixels.push(Pixels {
-                                x: mx,
-                                y: my,
-                                color: current_color,
-                            });
-                        } else if current_mode == AppMode::Eraser {
-                            drawn_pixels.retain(|p| p.x != mx || p.y != my);
-                        } else if current_mode == AppMode::Rectangle {
-                            if let Some((start_x, start_y)) = shape_start {
-                                ghost_pixels = rectangle_pixels((start_x, start_y), (mx, my));
-                            }
-                        } else if current_mode == AppMode::Square {
-                            if let Some((start_x, start_y)) = shape_start {
-                                let (end_x, end_y) = square_math((start_x, start_y), (mx, my));
-                                ghost_pixels = rectangle_pixels((start_x, start_y), (end_x, end_y));
+                        let screen = terminal.size()?;
+                        let sidebar = Rect::new(
+                            screen.width - sidebar_width,
+                            0,
+                            sidebar_width,
+                            screen.height,
+                        );
+                        if sidebar_open && mx == sidebar.x {
+                            let sidebar_drag = true;
+                        }
+                        let on_panel = sidebar_open
+                            && mx >= sidebar.x
+                            && mx < sidebar.right()
+                            && my >= sidebar.y
+                            && my < sidebar.bottom();
+                        if sidebar_drag {
+                            sidebar_width = (screen.width - mx).max(25).min(sidebar_width / 2);
+                        } else if !on_panel {
+                            if current_mode == AppMode::Freehand {
+                                drawn_pixels.push(Pixels {
+                                    x: mx,
+                                    y: my,
+                                    color: current_color,
+                                });
+                            } else if current_mode == AppMode::Eraser {
+                                drawn_pixels.retain(|p| p.x != mx || p.y != my);
+                            } else if current_mode == AppMode::Rectangle {
+                                if let Some((start_x, start_y)) = shape_start {
+                                    ghost_pixels = rectangle_pixels((start_x, start_y), (mx, my));
+                                }
+                            } else if current_mode == AppMode::Square {
+                                if let Some((start_x, start_y)) = shape_start {
+                                    let (end_x, end_y) = square_math((start_x, start_y), (mx, my));
+                                    ghost_pixels =
+                                        rectangle_pixels((start_x, start_y), (end_x, end_y));
+                                }
                             }
                         }
                     }
