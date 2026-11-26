@@ -146,6 +146,7 @@ fn main() -> Result<(), io::Error> {
     let mut current_mode = AppMode::Freehand;
     let mut sidebar_open = false;
     let mut sidebar_width: u16 = 35;
+    let mut sidebar_drag = false;
     let mut current_color = Color::Red;
     let mut shape_start: Option<(u16, u16)> = None;
     let _guard = PanicProof;
@@ -227,7 +228,7 @@ fn main() -> Result<(), io::Error> {
                             screen.height,
                         );
                         if sidebar_open && mx == sidebar.x {
-                            let sidebar_drag = true;
+                            sidebar_drag = true;
                         }
                         let on_panel = sidebar_open
                             && mx >= sidebar.x
@@ -261,16 +262,14 @@ fn main() -> Result<(), io::Error> {
                             sidebar_width,
                             screen.height,
                         );
-                        if sidebar_open && mx == sidebar.x {
-                            let sidebar_drag = true;
-                        }
+
                         let on_panel = sidebar_open
                             && mx >= sidebar.x
                             && mx < sidebar.right()
                             && my >= sidebar.y
                             && my < sidebar.bottom();
                         if sidebar_drag {
-                            sidebar_width = (screen.width - mx).max(25).min(sidebar_width / 2);
+                            sidebar_width = (screen.width - mx).max(25).min(screen.width / 2);
                         } else if !on_panel {
                             if current_mode == AppMode::Freehand {
                                 drawn_pixels.push(Pixels {
@@ -322,6 +321,7 @@ fn main() -> Result<(), io::Error> {
                             }
                         }
                         shape_start = None;
+                        sidebar_drag = false;
                         ghost_pixels.clear();
                     }
                     _ => {}
