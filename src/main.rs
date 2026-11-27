@@ -10,7 +10,7 @@ use ratatui::{
     layout::Rect,
     prelude::{Buffer, Widget},
     style::{Color, Style},
-    widgets::{Block, Borders},
+    widgets::{Block, BorderType::Rounded, Borders},
 };
 
 use std::io;
@@ -147,6 +147,7 @@ fn main() -> Result<(), io::Error> {
     let mut sidebar_open = false;
     let mut sidebar_width: u16 = 35;
     let mut sidebar_drag = false;
+    let mut mouse_pos_glow = (0u16, 0u16);
     let mut current_color = Color::Red;
     let mut shape_start: Option<(u16, u16)> = None;
     let _guard = PanicProof;
@@ -173,10 +174,23 @@ fn main() -> Result<(), io::Error> {
                 f.render_widget(canvas, canvas_area);
                 f.render_widget(
                     Block::default()
+                        .border_type(Rounded)
                         .borders(Borders::TOP | Borders::BOTTOM | Borders::LEFT)
                         .title(" Color Customization "),
                     sidebar_area,
                 );
+                let buf = f.buffer_mut();
+                let (mouse_x, _mouse_y) = mouse_pos_glow;
+                let glow = mouse_x == sidebar_area.x;
+                let grip_color = if glow { Color::Red } else { Color::DarkGray };
+                if sidebar_area.height >= 5 {
+                    let mid = sidebar_area.top() + sidebar_area.height / 2;
+                    for row in (mid - 2)..=(mid + 2) {
+                        buf[(sidebar_area.x, row)]
+                            .set_symbol("⣿")
+                            .set_style(Style::default().fg(grip_color));
+                    }
+                }
             } else {
                 f.render_widget(canvas, area);
             }
@@ -291,6 +305,10 @@ fn main() -> Result<(), io::Error> {
                                 }
                             }
                         }
+                    }
+
+                    MouseEventKind::Moved => {
+                        mouse_pos_glow = (mouse_event.column, mouse_event.row);
                     }
 
                     MouseEventKind::Up(crossterm::event::MouseButton::Left) => {
