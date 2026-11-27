@@ -74,7 +74,11 @@ impl<'a> Widget for TerminalCanvas<'a> {
             {
                 buf[(pixel.x, pixel.y)]
                     .set_symbol("█")
-                    .set_style(Style::default().fg(pixel.color));
+                    .set_style(Style::default().fg(Color::Rgb(
+                        pixel.color.0,
+                        pixel.color.1,
+                        pixel.color.2,
+                    )));
             }
         }
 
@@ -91,7 +95,7 @@ impl<'a> Widget for TerminalCanvas<'a> {
 struct Pixels {
     x: u16,
     y: u16,
-    color: Color,
+    color: (u8, u8, u8),
 }
 
 fn rectangle_pixels(start: (u16, u16), end: (u16, u16)) -> Vec<(u16, u16)> {
@@ -148,7 +152,7 @@ fn main() -> Result<(), io::Error> {
     let mut sidebar_width: u16 = 35;
     let mut sidebar_drag = false;
     let mut mouse_pos_glow = (0u16, 0u16);
-    let mut current_color = Color::Red;
+    let mut current_color: (u8, u8, u8) = (255, 0, 0);
     let mut shape_start: Option<(u16, u16)> = None;
     let _guard = PanicProof;
 
@@ -180,6 +184,23 @@ fn main() -> Result<(), io::Error> {
                     sidebar_area,
                 );
                 let buf = f.buffer_mut();
+                let label = "Current Color:";
+                let label_x = sidebar_area.x + 2;
+                let label_y = sidebar_area.y + 2;
+                for (i, ch) in label.chars().enumerate() {
+                    buf[(label_x + i as u16, label_y)]
+                        .set_symbol(&ch.to_string())
+                        .set_fg(Color::White);
+                }
+                for current_color_x in (sidebar_area.x + 2)..=(sidebar_area.right() - 4) {
+                    for current_color_y in (sidebar_area.y + 4)..=(sidebar_area.y + 5) {
+                        buf[(current_color_x, current_color_y)].set_bg(Color::Rgb(
+                            current_color.0,
+                            current_color.1,
+                            current_color.2,
+                        ));
+                    }
+                }
                 let (mouse_x, _mouse_y) = mouse_pos_glow;
                 let glow = mouse_x == sidebar_area.x;
                 let grip_color = if glow { Color::Red } else { Color::DarkGray };
@@ -220,8 +241,8 @@ fn main() -> Result<(), io::Error> {
                         sidebar_open = !sidebar_open;
                         ghost_pixels.clear();
                     }
-                    KeyCode::Char('1') => current_color = Color::Red,
-                    KeyCode::Char('2') => current_color = Color::Green,
+                    KeyCode::Char('1') => current_color = (255, 0, 0),
+                    KeyCode::Char('2') => current_color = (0, 255, 0),
                     KeyCode::Esc => {
                         drawn_pixels.clear();
                         ghost_pixels.clear();
