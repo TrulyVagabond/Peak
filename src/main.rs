@@ -9,7 +9,7 @@ use ratatui::{
     backend::CrosstermBackend,
     layout::Rect,
     prelude::{Buffer, Widget},
-    style::{Color, Style},
+    style::{Color, Style, Styled},
     widgets::{Block, BorderType::Rounded, Borders},
 };
 
@@ -64,6 +64,7 @@ impl<'a> Widget for TerminalCanvas<'a> {
         Block::default()
             .borders(borders)
             .title(title.as_str())
+            .set_style(Color::Rgb(255, 100, 100))
             .render(area, buf);
 
         for pixel in self.pixels {
@@ -96,6 +97,46 @@ struct Pixels {
     x: u16,
     y: u16,
     color: (u8, u8, u8),
+}
+
+struct SidebarLayout {
+    current_strip: Rect,
+    red_slider: Rect,
+    green_slider: Rect,
+    blue_slider: Rect,
+}
+
+fn sidebar_layout(sidebar_area: Rect) -> SidebarLayout {
+    let current_color_strip = Rect::new(
+        sidebar_area.x + 18,
+        sidebar_area.y + 2,
+        sidebar_area.width - 21,
+        1,
+    );
+    let red_slider_strip = Rect::new(
+        sidebar_area.x + 12,
+        sidebar_area.y + 6,
+        sidebar_area.width - 15,
+        1,
+    );
+    let green_slider_strip = Rect::new(
+        sidebar_area.x + 12,
+        sidebar_area.y + 7,
+        sidebar_area.width - 15,
+        1,
+    );
+    let blue_slider_strip = Rect::new(
+        sidebar_area.x + 12,
+        sidebar_area.y + 8,
+        sidebar_area.width - 15,
+        1,
+    );
+    SidebarLayout {
+        current_strip: current_color_strip,
+        red_slider: red_slider_strip,
+        green_slider: green_slider_strip,
+        blue_slider: blue_slider_strip,
+    }
 }
 
 fn rectangle_pixels(start: (u16, u16), end: (u16, u16)) -> Vec<(u16, u16)> {
@@ -152,7 +193,7 @@ fn main() -> Result<(), io::Error> {
     let mut sidebar_width: u16 = 35;
     let mut sidebar_drag = false;
     let mut mouse_pos_glow = (0u16, 0u16);
-    let mut current_color: (u8, u8, u8) = (255, 0, 0);
+    let mut current_color: (u8, u8, u8) = (0, 0, 0);
     let mut shape_start: Option<(u16, u16)> = None;
     let _guard = PanicProof;
 
@@ -180,25 +221,81 @@ fn main() -> Result<(), io::Error> {
                     Block::default()
                         .border_type(Rounded)
                         .borders(Borders::TOP | Borders::BOTTOM | Borders::LEFT)
-                        .title(" Color Customization "),
+                        .title(" [Color Customization] ")
+                        .set_style(Color::Rgb(255, 100, 100)),
                     sidebar_area,
                 );
+                let layout = sidebar_layout(sidebar_area);
+                let current_color_strip = layout.current_strip;
                 let buf = f.buffer_mut();
-                let label = "Current Color:";
+                let label = "[Current Color]:";
                 let label_x = sidebar_area.x + 2;
                 let label_y = sidebar_area.y + 2;
                 for (i, ch) in label.chars().enumerate() {
                     buf[(label_x + i as u16, label_y)]
                         .set_symbol(&ch.to_string())
-                        .set_fg(Color::White);
+                        .set_fg(Color::Rgb(255, 100, 100));
                 }
-                for current_color_x in (sidebar_area.x + 2)..=(sidebar_area.right() - 4) {
-                    for current_color_y in (sidebar_area.y + 4)..=(sidebar_area.y + 5) {
+                for current_color_x in current_color_strip.x..current_color_strip.right() {
+                    for current_color_y in current_color_strip.y..current_color_strip.bottom() {
                         buf[(current_color_x, current_color_y)].set_bg(Color::Rgb(
                             current_color.0,
                             current_color.1,
                             current_color.2,
                         ));
+                    }
+                }
+                let label = "[Sliders]";
+                let label_x = sidebar_area.x + 2;
+                let label_y = sidebar_area.y + 4;
+                for (i, ch) in label.chars().enumerate() {
+                    buf[(label_x + i as u16, label_y)]
+                        .set_symbol(&ch.to_string())
+                        .set_fg(Color::Rgb(255, 100, 100));
+                }
+                let label = "[Red]:";
+                let label_x = sidebar_area.x + 2;
+                let label_y = sidebar_area.y + 6;
+                for (i, ch) in label.chars().enumerate() {
+                    buf[(label_x + i as u16, label_y)]
+                        .set_symbol(&ch.to_string())
+                        .set_fg(Color::Rgb(255, 0, 0));
+                }
+                let slider_count_red = current_color.0 as u16 * layout.red_slider.width / 255;
+                let red_slider = layout.red_slider;
+                for red_slider_x in red_slider.x..red_slider.right() {
+                    for red_slider_y in red_slider.y..red_slider.bottom() {
+                        buf[(red_slider_x, red_slider_y)].set_bg(Color::Rgb(255, 0, 0));
+                    }
+                }
+                let label = "[Green]:";
+                let label_x = sidebar_area.x + 2;
+                let label_y = sidebar_area.y + 7;
+                for (i, ch) in label.chars().enumerate() {
+                    buf[(label_x + i as u16, label_y)]
+                        .set_symbol(&ch.to_string())
+                        .set_fg(Color::Rgb(0, 255, 0));
+                }
+                let slider_count_green = current_color.1 as u16 * layout.green_slider.width / 255;
+                let green_slider = layout.green_slider;
+                for green_slider_x in green_slider.x..green_slider.right() {
+                    for green_slider_y in green_slider.y..green_slider.bottom() {
+                        buf[(green_slider_x, green_slider_y)].set_bg(Color::Rgb(0, 255, 0));
+                    }
+                }
+                let label = "[Blue]:";
+                let label_x = sidebar_area.x + 2;
+                let label_y = sidebar_area.y + 8;
+                for (i, ch) in label.chars().enumerate() {
+                    buf[(label_x + i as u16, label_y)]
+                        .set_symbol(&ch.to_string())
+                        .set_fg(Color::Rgb(0, 0, 255));
+                }
+                let slider_count_blue = current_color.2 as u16 * layout.blue_slider.width / 255;
+                let blue_slider = layout.blue_slider;
+                for blue_slider_x in blue_slider.x..blue_slider.right() {
+                    for blue_slider_y in blue_slider.y..blue_slider.bottom() {
+                        buf[(blue_slider_x, blue_slider_y)].set_bg(Color::Rgb(0, 0, 255));
                     }
                 }
                 let (mouse_x, _mouse_y) = mouse_pos_glow;
@@ -241,8 +338,9 @@ fn main() -> Result<(), io::Error> {
                         sidebar_open = !sidebar_open;
                         ghost_pixels.clear();
                     }
-                    KeyCode::Char('1') => current_color = (255, 0, 0),
-                    KeyCode::Char('2') => current_color = (0, 255, 0),
+                    KeyCode::Char('1') => current_color = (0, 0, 0),
+                    KeyCode::Char('2') => current_color = (255, 0, 0),
+                    KeyCode::Char('3') => current_color = (0, 255, 0),
                     KeyCode::Esc => {
                         drawn_pixels.clear();
                         ghost_pixels.clear();
